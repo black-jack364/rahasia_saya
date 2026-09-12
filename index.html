@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Pendataan Warga & Status Pemilih</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- jsPDF & jsPDF-AutoTable CDN for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Konfigurasi Google Apps Script Web App URL -->
+    <script>
+        // MASUKKAN URL WEB APP APPS SCRIPT ANDA DI SINI
+        const API_URL = "https://script.google.com/macros/s/AKfycbx-z1LxaZWMmEys93-9g7tFAXIyQEHbzAnv2rrLkIhsU5O3RuMpOHlx3PQH6Nbn_U4/exec"; 
+    </script>
+
+    <!-- Sidebar Mobile Backdrop -->
+    <div id="sidebar-backdrop" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 hidden md:hidden transition-opacity"></div>
+
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="fixed md:static inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col transition-all duration-300 transform -translate-x-full md:translate-x-0 shrink-0 shadow-xl overflow-y-auto">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                <div class="flex items-center space-x-3 overflow-hidden">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-600/30">
+                        <i class="fa-solid fa-users-rectangle text-xl text-white"></i>
+                    </div>
+                    <div class="truncate">
+                        <h1 class="font-bold text-base tracking-wide text-white leading-tight truncate">Data Pemilih</h1>
+                        <p class="text-xs text-indigo-400 font-medium truncate">RT 001 - 036</p>
+                    </div>
+                </div>
+                <button onclick="toggleSidebar()" class="md:hidden text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <nav class="flex-1 p-4 space-y-1.5">
+                <button id="nav-chart" onclick="switchView('chart')" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg bg-indigo-600 text-white font-medium text-sm transition">
+                    <i class="fa-solid fa-chart-pie w-5 text-center"></i>
+                    <span>Grafik & Statistik</span>
+                </button>
+                <button id="nav-table" onclick="switchView('table')" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white font-medium text-sm transition">
+                    <i class="fa-solid fa-users-viewfinder w-5 text-center text-indigo-400"></i>
+                    <span>Data Warga & Pemilih</span>
+                </button>
+                <button onclick="openAddWargaModal()" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white font-medium text-sm transition">
+                    <i class="fa-solid fa-user-plus w-5 text-center text-emerald-400"></i>
+                    <span>Tambah Data Warga</span>
+                </button>
+                <button onclick="exportDataToPDF()" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white font-medium text-sm transition">
+                    <i class="fa-solid fa-file-pdf w-5 text-center text-rose-400"></i>
+                    <span>Ekspor Data (PDF)</span>
+                </button>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <div class="flex-1 flex flex-col min-w-0 overflow-y-auto">
+            <header class="bg-white border-b border-slate-200 sticky top-0 z-30 px-4 py-3 sm:px-6 flex items-center justify-between shadow-sm">
+                <div class="flex items-center space-x-3">
+                    <button onclick="toggleSidebar()" class="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition md:hidden">
+                        <i class="fa-solid fa-bars text-lg"></i>
+                    </button>
+                    <div>
+                        <h2 id="header-title" class="text-lg font-bold text-slate-800">Grafik & Statistik Pendataan Warga</h2>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button onclick="fetchDataFromSheet()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition">
+                        <i class="fa-solid fa-rotate"></i>
+                        <span class="hidden sm:inline">Sinkronisasi</span>
+                    </button>
+                    <button onclick="openAddWargaModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-sm transition">
+                        <i class="fa-solid fa-plus"></i>
+                        <span class="hidden sm:inline">Tambah Data</span>
+                    </button>
+                </div>
+            </header>
+
+            <main class="p-4 sm:p-6 space-y-6 flex-1">
+                <!-- VIEW 1: GRAFIK & STATISTIK -->
+                <div id="view-chart" class="space-y-6">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-slate-500">Total Warga</p>
+                                <h3 id="stat-total" class="text-2xl font-extrabold text-slate-800 mt-1">0</h3>
+                            </div>
+                            <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                                <i class="fa-solid fa-users text-lg"></i>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-slate-500">Jumlah Pemilih</p>
+                                <h3 id="stat-pemilih" class="text-2xl font-extrabold text-emerald-600 mt-1">0</h3>
+                            </div>
+                            <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                <i class="fa-solid fa-user-check text-lg"></i>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-slate-500">Bukan Pemilih</p>
+                                <h3 id="stat-bukan" class="text-2xl font-extrabold text-rose-600 mt-1">0</h3>
+                            </div>
+                            <div class="w-10 h-10 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+                                <i class="fa-solid fa-user-xmark text-lg"></i>
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-slate-500">Jumlah NKK</p>
+                                <h3 id="stat-kk" class="text-2xl font-extrabold text-indigo-600 mt-1">0</h3>
+                            </div>
+                            <div class="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                                <i class="fa-solid fa-address-card text-lg"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm">
+                            <h4 class="text-sm font-bold text-slate-800 mb-3 flex items-center justify-between">
+                                <span class="flex items-center"><i class="fa-solid fa-chart-column text-indigo-500 mr-2"></i> Status Hak Pilih per RT (RT 001 - RT 036)</span>
+                                <span class="text-xs text-slate-500 font-normal">36 RT</span>
+                            </h4>
+                            <div class="h-64 sm:h-72 relative"><canvas id="chartPemilih"></canvas></div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm">
+                                <h4 class="text-sm font-bold text-slate-800 mb-3 flex items-center"><i class="fa-solid fa-venus-mars text-blue-500 mr-2"></i> Jenis Kelamin</h4>
+                                <div class="h-56 relative"><canvas id="chartGender"></canvas></div>
+                            </div>
+                            <div class="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-sm">
+                                <h4 class="text-sm font-bold text-slate-800 mb-3 flex items-center"><i class="fa-solid fa-cake-candles text-amber-500 mr-2"></i> Distribusi Umur</h4>
+                                <div class="h-56 relative"><canvas id="chartUmur"></canvas></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VIEW 2: DATA WARGA & TABEL -->
+                <div id="view-table" class="space-y-6 hidden">
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+                        <div class="p-4 bg-slate-50 border-b border-slate-200 gap-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+                            <div class="relative">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-slate-400 text-xs"></i>
+                                <input type="text" id="search-input" onkeyup="filterData()" placeholder="Cari Nama, NIK, No. KK..." 
+                                    class="w-full pl-9 pr-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <select id="filter-status" onchange="filterData()" class="w-full py-2 px-3 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="ALL">-- Semua Status Pemilih --</option>
+                                    <option value="Pemilih">Pemilih</option>
+                                    <option value="Bukan Pemilih">Bukan Pemilih</option>
+                                </select>
+                            </div>
+                            <div>
+                                <select id="filter-rt" onchange="filterData()" class="w-full py-2 px-3 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="ALL">-- Semua RT (36 RT) --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <select id="filter-tps" onchange="filterData()" class="w-full py-2 px-3 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="ALL">-- Semua TPS --</option>
+                                    <option value="01">TPS 01</option>
+                                    <option value="02">TPS 02</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button onclick="resetFilters()" class="w-full py-2 px-3 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition flex items-center justify-center space-x-1">
+                                    <i class="fa-solid fa-rotate-left"></i><span>Reset Filter</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto min-h-[350px]">
+                            <table class="w-full text-xs text-left text-slate-600">
+                                <thead class="bg-slate-900 text-white uppercase font-bold text-[11px] tracking-wider border-b-2 border-slate-950">
+                                    <tr>
+                                        <th class="px-3 py-3 text-center w-12">NO</th>
+                                        <th class="px-3 py-3 text-left">KK</th>
+                                        <th class="px-3 py-3 text-left">NIK</th>
+                                        <th class="px-3 py-3 text-left">NAMA LENGKAP</th>
+                                        <th class="px-3 py-3 text-left">TEMPAT LAHIR</th>
+                                        <th class="px-3 py-3 text-center">TANGGAL LAHIR</th>
+                                        <th class="px-3 py-3 text-center">UMUR</th>
+                                        <th class="px-3 py-3 text-center">JK</th>
+                                        <th class="px-3 py-3 text-center">RT</th>
+                                        <th class="px-3 py-3 text-center">TPS</th>
+                                        <th class="px-4 py-3 text-center min-w-[160px]">STATUS HAK PILIH</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-body"></tbody>
+                            </table>
+                        </div>
+
+                        <div class="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                            <div class="text-slate-500" id="pagination-info">
+                                Menampilkan <span class="font-semibold text-slate-800" id="page-start">0</span> - <span class="font-semibold text-slate-800" id="page-end">0</span> dari <span class="font-semibold text-slate-800" id="total-items">0</span> data
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <span class="text-slate-500">Tampilkan:</span>
+                                <select id="items-per-page" onchange="changeItemsPerPage()" class="border border-slate-300 rounded px-2 py-1 text-xs bg-white font-medium">
+                                    <option value="10">10</option>
+                                    <option value="25" selected>25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                                <div class="flex space-x-1 pl-2" id="pagination-buttons"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal Tambah Warga -->
+    <div id="modal-add" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
+            <div class="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+                <h3 class="font-bold text-sm flex items-center"><i class="fa-solid fa-user-plus text-indigo-400 mr-2"></i> Tambah Data Warga Baru</h3>
+                <button onclick="closeAddWargaModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form id="form-tambah-warga" onsubmit="saveWarga(event)" class="p-5 overflow-y-auto space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Nomor Kartu Keluarga (KK)</label>
+                    <input type="text" id="add-kk" maxlength="16" required placeholder="16 Digit Nomor KK" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Nomor Induk Kependudukan (NIK)</label>
+                    <input type="text" id="add-nik" maxlength="16" required placeholder="16 Digit NIK" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 font-mono">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Nama Lengkap</label>
+                    <input type="text" id="add-nama" required placeholder="Nama Lengkap Warga" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Tempat Lahir</label>
+                        <input type="text" id="add-tempat" required placeholder="Kota Lahir" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Tanggal Lahir</label>
+                        <input type="date" id="add-tanggal" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Jenis Kelamin</label>
+                        <select id="add-jk" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                            <option value="L">Laki-Laki (L)</option>
+                            <option value="P">Perempuan (P)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">RT</label>
+                        <select id="add-rt" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500"></select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">TPS</label>
+                        <select id="add-tps" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                            <option value="01">TPS 01</option>
+                            <option value="02">TPS 02</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Status Hak Pilih Awal</label>
+                    <select id="add-status" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                        <option value="Pemilih">Pemilih</option>
+                        <option value="Bukan Pemilih" selected>Bukan Pemilih</option>
+                    </select>
+                </div>
+                <div class="pt-3 flex justify-end space-x-2 border-t border-slate-200 mt-4">
+                    <button type="button" onclick="closeAddWargaModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-semibold">Batal</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-md">Simpan Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+        <div class="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 text-xs border border-slate-700">
+            <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+            <span id="toast-message" class="font-medium">Notifikasi</span>
+        </div>
+    </div>
+
+    <script>
+        let dataWarga = [];
+        let activeView = 'chart';
+        let currentPage = 1;
+        let itemsPerPage = 25;
+        let filteredData = [];
+
+        let chartPemilihInstance = null;
+        let chartGenderInstance = null;
+        let chartUmurInstance = null;
+
+        window.onload = function() {
+            populateRtOptions();
+            fetchDataFromSheet();
+            initCharts();
+        };
+
+        function populateRtOptions() {
+            const filterRtSelect = document.getElementById('filter-rt');
+            const addRtSelect = document.getElementById('add-rt');
+            let optionsHtml = '';
+            for (let i = 1; i <= 36; i++) {
+                const rtNum = String(i).padStart(3, '0');
+                optionsHtml += `<option value="${rtNum}">RT ${rtNum}</option>`;
+            }
+            if (filterRtSelect) filterRtSelect.innerHTML = `<option value="ALL">-- Semua RT (36 RT) --</option>` + optionsHtml;
+            if (addRtSelect) addRtSelect.innerHTML = optionsHtml;
+        }
+
+        function fetchDataFromSheet() {
+            if (!API_URL || API_URL.includes("URL_WEB_APP")) {
+                showToast("URL Apps Script belum disetel!");
+                return;
+            }
+            showToast("Mensinkronkan data dengan Google Sheet...");
+            fetch(API_URL + "?action=get")
+                .then(res => res.json())
+                .then(res => {
+                    if (res.status === "success" && res.data) {
+                        dataWarga = res.data;
+                        filterData();
+                        showToast("Data berhasil disinkronkan dari Sheet!");
+                    }
+                })
+                .catch(err => {
+                    console.error("Gagal sinkron:", err);
+                    showToast("Gagal terhubung ke Google Sheet.");
+                });
+        }
+
+        function switchView(view) {
+            activeView = view;
+            const viewChart = document.getElementById('view-chart');
+            const viewTable = document.getElementById('view-table');
+            const navChart = document.getElementById('nav-chart');
+            const navTable = document.getElementById('nav-table');
+            const headerTitle = document.getElementById('header-title');
+
+            if (view === 'chart') {
+                viewChart?.classList.remove('hidden');
+                viewTable?.classList.add('hidden');
+                navChart?.classList.add('bg-indigo-600', 'text-white');
+                navChart?.classList.remove('text-slate-300', 'hover:bg-slate-800');
+                navTable?.classList.remove('bg-indigo-600', 'text-white');
+                navTable?.classList.add('text-slate-300', 'hover:bg-slate-800');
+                if (headerTitle) headerTitle.innerText = "Grafik & Statistik Pendataan Warga";
+                setTimeout(() => {
+                    if (chartPemilihInstance) chartPemilihInstance.resize();
+                    if (chartGenderInstance) chartGenderInstance.resize();
+                    if (chartUmurInstance) chartUmurInstance.resize();
+                }, 50);
+            } else {
+                viewChart?.classList.add('hidden');
+                viewTable?.classList.remove('hidden');
+                navTable?.classList.add('bg-indigo-600', 'text-white');
+                navTable?.classList.remove('text-slate-300', 'hover:bg-slate-800');
+                navChart?.classList.remove('bg-indigo-600', 'text-white');
+                navChart?.classList.add('text-slate-300', 'hover:bg-slate-800');
+                if (headerTitle) headerTitle.innerText = "Daftar Pemilih & Data Warga";
+            }
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            if (!sidebar || !backdrop) return;
+            sidebar.classList.toggle('-translate-x-full');
+            backdrop.classList.toggle('hidden');
+        }
+
+        function formatDateIndo(dateStr) {
+            if (!dateStr) return '-';
+            const parts = dateStr.split('-');
+            return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : dateStr;
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        }
+
+        function filterData() {
+            const searchVal = document.getElementById('search-input')?.value.toLowerCase().trim() || '';
+            const statusVal = document.getElementById('filter-status')?.value || 'ALL';
+            const rtVal = document.getElementById('filter-rt')?.value || 'ALL';
+            const tpsVal = document.getElementById('filter-tps')?.value || 'ALL';
+
+            filteredData = dataWarga.filter(item => {
+                const matchSearch = item.nama.toLowerCase().includes(searchVal) || item.nik.includes(searchVal) || item.kk.includes(searchVal);
+                const matchStatus = statusVal === 'ALL' || item.statusPemilih === statusVal;
+                const matchRt = rtVal === 'ALL' || item.rt === rtVal;
+                const matchTps = tpsVal === 'ALL' || item.tps === tpsVal;
+                return matchSearch && matchStatus && matchRt && matchTps;
+            });
+            filteredData.sort((a, b) => a.kk.localeCompare(b.kk));
+            currentPage = 1;
+            renderDashboard();
+        }
+
+        function resetFilters() {
+            document.getElementById('search-input').value = '';
+            document.getElementById('filter-status').value = 'ALL';
+            document.getElementById('filter-rt').value = 'ALL';
+            document.getElementById('filter-tps').value = 'ALL';
+            filterData();
+        }
+
+        function renderDashboard() {
+            renderTable(filteredData);
+            updateStats(filteredData);
+            updateCharts(filteredData);
+        }
+
+        function renderTable(data) {
+            const tableBody = document.getElementById('table-body');
+            if (!tableBody) return;
+            const totalItems = data.length;
+            const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+            const pageData = data.slice(startIndex, endIndex);
+
+            if (pageData.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="11" class="px-6 py-10 text-center text-slate-400"><p class="font-medium text-slate-500">Data warga tidak ditemukan</p></td></tr>`;
+                renderPagination(0, 0, 0, 1);
+                return;
+            }
+
+            let html = '';
+            pageData.forEach((warga, idx) => {
+                const absoluteIndex = startIndex + idx + 1;
+                html += `
+                    <tr class="transition hover:bg-slate-50 border-t border-slate-200">
+                        <td class="px-3 py-3 text-center font-bold text-slate-500">${absoluteIndex}</td>
+                        <td class="px-3 py-3 font-mono text-xs font-bold text-indigo-950">${escapeHtml(warga.kk)}</td>
+                        <td class="px-3 py-3 font-mono text-xs text-slate-600">${escapeHtml(warga.nik)}</td>
+                        <td class="px-3 py-3 font-bold text-slate-900">${escapeHtml(warga.nama)}</td>
+                        <td class="px-3 py-3 text-slate-600">${escapeHtml(warga.tempatLahir)}</td>
+                        <td class="px-3 py-3 text-center text-slate-600">${formatDateIndo(warga.tanggalLahir)}</td>
+                        <td class="px-3 py-3 text-center font-semibold text-slate-700">${warga.usia}</td>
+                        <td class="px-3 py-3 text-center font-bold"><span class="px-2 py-0.5 text-xs rounded ${warga.jk === 'L' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'}">${warga.jk}</span></td>
+                        <td class="px-3 py-3 text-center font-semibold text-slate-700">${escapeHtml(warga.rt)}</td>
+                        <td class="px-3 py-3 text-center font-semibold text-slate-700">${escapeHtml(warga.tps)}</td>
+                        <td class="px-4 py-3 text-center">
+                            <select onchange="setStatusPemilih('${warga.id}', this.value)" class="px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${warga.statusPemilih === 'Pemilih' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-rose-50 text-rose-700 border-rose-300'}">
+                                <option value="Pemilih" ${warga.statusPemilih === 'Pemilih' ? 'selected' : ''}>Pemilih</option>
+                                <option value="Bukan Pemilih" ${warga.statusPemilih === 'Bukan Pemilih' ? 'selected' : ''}>Bukan Pemilih</option>
+                            </select>
+                        </td>
+                    </tr>`;
+            });
+            tableBody.innerHTML = html;
+            renderPagination(totalItems, startIndex + 1, endIndex, totalPages);
+        }
+
+        function setStatusPemilih(id, newStatus) {
+            const warga = dataWarga.find(w => String(w.id) === String(id));
+            if (warga) {
+                warga.statusPemilih = newStatus;
+                renderDashboard();
+                showToast(`Status <strong>${escapeHtml(warga.nama)}</strong> diubah menjadi <strong>${newStatus}</strong>`);
+                if (API_URL && !API_URL.includes("URL_WEB_APP")) {
+                    fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "updateStatus", id: id, statusPemilih: newStatus }) }).catch(err => console.error(err));
+                }
+            }
+        }
+
+        function renderPagination(totalItems, startItem, endItem, totalPages) {
+            document.getElementById('page-start').innerText = totalItems === 0 ? 0 : startItem;
+            document.getElementById('page-end').innerText = endItem;
+            document.getElementById('total-items').innerText = totalItems;
+            const buttonsEl = document.getElementById('pagination-buttons');
+            if (!buttonsEl) return;
+
+            let btnHtml = `<button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled class="opacity-40 px-2 py-1 border bg-white"' : 'class="px-2 py-1 border bg-white"'}>&lt;</button>`;
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
+                    btnHtml += `<button onclick="goToPage(${i})" class="px-2.5 py-1 border font-semibold ${currentPage === i ? 'bg-indigo-600 text-white' : 'bg-white'}">${i}</button>`;
+                }
+            }
+            btnHtml += `<button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages || totalPages === 0 ? 'disabled class="opacity-40 px-2 py-1 border bg-white"' : 'class="px-2 py-1 border bg-white"'}>&gt;</button>`;
+            buttonsEl.innerHTML = btnHtml;
+        }
+
+        function goToPage(page) {
+            const totalPages = Math.ceil(filteredData.length / itemsPerPage) || 1;
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            renderTable(filteredData);
+        }
+
+        function changeItemsPerPage() {
+            itemsPerPage = parseInt(document.getElementById('items-per-page').value, 10) || 25;
+            currentPage = 1;
+            renderTable(filteredData);
+        }
+
+        function updateStats(data) {
+            document.getElementById('stat-total').innerText = data.length;
+            document.getElementById('stat-pemilih').innerText = data.filter(w => w.statusPemilih === 'Pemilih').length;
+            document.getElementById('stat-bukan').innerText = data.filter(w => w.statusPemilih === 'Bukan Pemilih').length;
+            document.getElementById('stat-kk').innerText = new Set(data.map(w => w.kk)).size;
+        }
+
+        function initCharts() {
+            chartPemilihInstance = new Chart(document.getElementById('chartPemilih').getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: Array.from({ length: 36 }, (_, i) => `RT ${String(i + 1).padStart(3, '0')}`),
+                    datasets: [
+                        { label: 'Pemilih', data: new Array(36).fill(0), backgroundColor: '#10b981' },
+                        { label: 'Bukan Pemilih', data: new Array(36).fill(0), backgroundColor: '#f43f5e' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { font: { size: 9 }, maxRotation: 90 } } } }
+            });
+
+            chartGenderInstance = new Chart(document.getElementById('chartGender').getContext('2d'), {
+                type: 'pie',
+                data: { labels: ['L', 'P'], datasets: [{ data: [0, 0], backgroundColor: ['#3b82f6', '#ec4899'] }] },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            chartUmurInstance = new Chart(document.getElementById('chartUmur').getContext('2d'), {
+                type: 'bar',
+                data: { labels: ['< 17 Thn', '17-30 Thn', '31-50 Thn', '> 50 Thn'], datasets: [{ data: [0, 0, 0, 0], backgroundColor: '#6366f1' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function updateCharts(data) {
+            const pemilihPerRt = new Array(36).fill(0);
+            const bukanPerRt = new Array(36).fill(0);
+            data.forEach(w => {
+                const rtNum = parseInt(w.rt, 10);
+                if (rtNum >= 1 && rtNum <= 36) {
+                    if (w.statusPemilih === 'Pemilih') pemilihPerRt[rtNum - 1]++;
+                    else bukanPerRt[rtNum - 1]++;
+                }
+            });
+
+            if (chartPemilihInstance) {
+                chartPemilihInstance.data.datasets[0].data = pemilihPerRt;
+                chartPemilihInstance.data.datasets[1].data = bukanPerRt;
+                chartPemilihInstance.update();
+            }
+            if (chartGenderInstance) {
+                chartGenderInstance.data.datasets[0].data = [data.filter(w => w.jk === 'L').length, data.filter(w => w.jk === 'P').length];
+                chartGenderInstance.update();
+            }
+            if (chartUmurInstance) {
+                chartUmurInstance.data.datasets[0].data = [
+                    data.filter(w => w.usia < 17).length,
+                    data.filter(w => w.usia >= 17 && w.usia <= 30).length,
+                    data.filter(w => w.usia >= 31 && w.usia <= 50).length,
+                    data.filter(w => w.usia > 50).length
+                ];
+                chartUmurInstance.update();
+            }
+        }
+
+        function openAddWargaModal() { document.getElementById('modal-add').classList.remove('hidden'); }
+        function closeAddWargaModal() { 
+            document.getElementById('modal-add').classList.add('hidden'); 
+            document.getElementById('form-tambah-warga').reset(); 
+        }
+
+        function saveWarga(event) {
+            event.preventDefault();
+            const newWarga = {
+                id: new Date().getTime(),
+                kk: document.getElementById('add-kk').value.trim(),
+                nik: document.getElementById('add-nik').value.trim(),
+                nama: document.getElementById('add-nama').value.trim(),
+                tempatLahir: document.getElementById('add-tempat').value.trim(),
+                tanggalLahir: document.getElementById('add-tanggal').value,
+                jk: document.getElementById('add-jk').value,
+                rt: document.getElementById('add-rt').value,
+                tps: document.getElementById('add-tps').value,
+                statusPemilih: document.getElementById('add-status').value
+            };
+
+            const birth = new Date(newWarga.tanggalLahir);
+            const now = new Date();
+            let usia = now.getFullYear() - birth.getFullYear();
+            if (now.getMonth() < birth.getMonth() || (now.getMonth() === birth.getMonth() && now.getDate() < birth.getDate())) usia--;
+            newWarga.usia = usia < 0 ? 0 : usia;
+
+            dataWarga.push(newWarga);
+            closeAddWargaModal();
+            filterData();
+            showToast(`Warga <strong>${escapeHtml(newWarga.nama)}</strong> berhasil ditambahkan!`);
+
+            if (API_URL && !API_URL.includes("URL_WEB_APP")) {
+                fetch(API_URL, { method: "POST", body: JSON.stringify({ action: "add", ...newWarga }) }).catch(err => console.error(err));
+            }
+        }
+
+        function exportDataToPDF() {
+            if (filteredData.length === 0) { showToast('Tidak ada data!'); return; }
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+            
+            doc.setFontSize(14);
+            doc.text("DAFTAR PEMILIH & DATA WARGA", 20, 15);
+            doc.autoTable({
+                head: [["NO", "NO. KK", "NIK", "NAMA LENGKAP", "TEMPAT LAHIR", "TGL LAHIR", "UMUR", "JK", "RT", "TPS", "STATUS"]],
+                body: filteredData.map((item, idx) => [idx + 1, item.kk, item.nik, item.nama, item.tempatLahir, formatDateIndo(item.tanggalLahir), item.usia, item.jk, item.rt, item.tps, item.statusPemilih]),
+                startY: 25,
+                styles: { fontSize: 8 }
+            });
+            doc.save(`data_warga_${new Date().toISOString().slice(0,10)}.pdf`);
+            showToast('PDF berhasil diunduh!');
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerHTML = message;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3000);
+        }
+    </script>
+</body>
+</html>
